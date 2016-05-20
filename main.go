@@ -1,19 +1,20 @@
 package main
 
 import (
-	"github.com/mesos/mesos-go/mesosproto"
+	"flag"
+
 	"github.com/golang/protobuf/proto"
+	"github.com/mesos/mesos-go/mesosproto"
 	"github.com/mesos/mesos-go/mesosutil"
 	"github.com/mesos/mesos-go/scheduler"
-	"flag"
-	"net"
+
+	"os"
 
 	log "github.com/Sirupsen/logrus"
-	"os"
 )
 
 var (
-	master       = flag.String("master", "127.0.0.1:5050", "Master address <ip:port>")
+	master = flag.String("master", "127.0.0.1:5050", "Master address <ip:port>")
 )
 
 func init() {
@@ -22,7 +23,7 @@ func init() {
 
 func main() {
 	//ExecutorInfo
-	executorUri := "https://s3-eu-west-1.amazonaws.com/enablers/executor"
+	executorUri := "http://s3-eu-west-1.amazonaws.com/enablers/executor"
 	executorUris := []*mesosproto.CommandInfo_URI{
 		{
 			Value:      &executorUri,
@@ -40,23 +41,21 @@ func main() {
 		},
 	}
 
-
 	//Scheduler
-	my_scheduler := NewExampleScheduler(executorInfo, 1, 128)
-
+	my_scheduler := NewExampleScheduler(executorInfo, 0.5, 128.0)
 
 	//Framework
 	frameworkInfo := &mesosproto.FrameworkInfo{
-		User: proto.String(""), // Mesos-go will fill in user.
+		User: proto.String("root"), // Mesos-go will fill in user.
 		Name: proto.String("Stratio Server Framework (Go)"),
 	}
 
 	//Scheduler Driver
 	config := scheduler.DriverConfig{
-		Scheduler:      my_scheduler,
-		Framework:      frameworkInfo,
-		Master:         *master,
-		Credential:     (*mesosproto.Credential)(nil),
+		Scheduler:  my_scheduler,
+		Framework:  frameworkInfo,
+		Master:     *master,
+		Credential: (*mesosproto.Credential)(nil),
 	}
 
 	driver, err := scheduler.NewMesosSchedulerDriver(config)
@@ -70,15 +69,4 @@ func main() {
 		log.Fatalf("Framework stopped with status %s and error: %s\n", stat.String(), err.Error())
 		os.Exit(-4)
 	}
-}
-
-func parseIP(address string) net.IP {
-	addr, err := net.LookupIP(address)
-	if err != nil {
-		log.Fatal(err)
-	}
-	if len(addr) < 1 {
-		log.Fatalf("failed to parse IP from address '%v'", address)
-	}
-	return addr[0]
 }

@@ -14,7 +14,7 @@ type ExampleScheduler struct {
 	neededCpu     float64
 	neededRam     float64
 	timesLaunched int
-	launched bool
+	launched      bool
 }
 
 //NewExampleScheduler returns a Scheduler filled with the provided information
@@ -51,7 +51,7 @@ func (sched *ExampleScheduler) SlaveLost(s scheduler.SchedulerDriver, id *mesosp
 }
 
 func (sched *ExampleScheduler) ExecutorLost(s scheduler.SchedulerDriver, exId *mesosproto.ExecutorID, slvId *mesosproto.SlaveID, i int) {
-	log.Infof("Executor '%v' lost on slave '%v' with exit code: %v.\n", *exId, *slvId, i)
+	log.Infof("Executor '%v' lost on slave '%v' with exit code: %v.\n", exId.GetValue(), slvId.GetValue(), i)
 }
 
 func (sched *ExampleScheduler) Error(driver scheduler.SchedulerDriver, err string) {
@@ -77,7 +77,7 @@ func (s *ExampleScheduler) StatusUpdate(driver scheduler.SchedulerDriver, status
 		log.Infoln(
 			"Aborting because task", status.TaskId.GetValue(),
 			"is in unexpected state", status.State.String(),
-			"with message", status.GetMessage(),
+			"with message: ", status.GetMessage(),
 		)
 		driver.Abort()
 	}
@@ -87,7 +87,7 @@ func (s *ExampleScheduler) ResourceOffers(driver scheduler.SchedulerDriver, offe
 	for _, offer := range offers {
 		if s.launched {
 			driver.DeclineOffer(offer.Id, &mesosproto.Filters{RefuseSeconds: proto.Float64(1)})
-			return
+			continue
 		}
 		log.Infof("Received Offer <%v> with cpus=%v mem=%v", offer.Id.GetValue(), getOfferCpu(offer), getOfferMem(offer))
 
@@ -95,12 +95,14 @@ func (s *ExampleScheduler) ResourceOffers(driver scheduler.SchedulerDriver, offe
 		offeredMem := getOfferMem(offer)
 
 		//Decline offer if the offer doesn't satisfy our needs
-		//if offeredCpu < s.neededCpu || offeredMem < s.neededRam {
-		//	driver.DeclineOffer(offer.Id, &mesosproto.Filters{RefuseSeconds: proto.Float64(1)})
-		//	return
-		//}
+		if offeredCpu < s.neededCpu || offeredMem < s.neededRam {
+			log.Infof("Declining offer <%v>\n", offer.Id.GetValue())
+			driver.DeclineOffer(offer.Id, &mesosproto.Filters{RefuseSeconds: proto.Float64(1)})
+			continue
+		}
 
 		// At this point we have determined we will be accepting at least part of this offer
+		s.launched = true
 		var tasks []*mesosproto.TaskInfo
 
 		taskId := &mesosproto.TaskID{
@@ -122,17 +124,14 @@ func (s *ExampleScheduler) ResourceOffers(driver scheduler.SchedulerDriver, offe
 		log.Infof("Prepared task: %s with offer %s for launch\n", task.GetName(), offer.Id.GetValue())
 
 		tasks = append(tasks, task)
-		offeredCpu -= s.neededCpu
-		offeredMem -= s.neededRam
 
 		log.Infoln("Launching task for offer", offer.Id.GetValue())
-		driver.LaunchTasks([]*mesosproto.OfferID{offer.Id}, tasks, &mesosproto.Filters{RefuseSeconds: proto.Float64(1)})
+		driver.LaunchTasks([]*mesosproto.OfferID{offer.Id}, tasks, &mesosproto.Filters{RefuseSeconds: proto.Float64(10)})
 	}
 }
 
 func getOfferScalar(offer *mesosproto.Offer, name string) float64 {
 	resources := mesosutil.FilterResources(offer.Resources, func(res *mesosproto.Resource) bool {
-		println(res.GetName())
 		return res.GetName() == name
 	})
 
