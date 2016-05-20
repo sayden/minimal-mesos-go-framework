@@ -52,6 +52,6 @@ _testmain.go
 *.prof
 
 minimal-mesos-framework
-executor/executor
+example_executor/executor
 
 minimal-mesos-framework.iml

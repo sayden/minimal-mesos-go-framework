@@ -7,6 +7,7 @@ import (
 	"github.com/mesos/mesos-go/mesosproto"
 	"github.com/mesos/mesos-go/mesosutil"
 	"github.com/mesos/mesos-go/scheduler"
+	"github.com/sayden/minimal-mesos-framework/example_scheduler"
 
 	"os"
 
@@ -42,7 +43,11 @@ func main() {
 	}
 
 	//Scheduler
-	my_scheduler := NewExampleScheduler(executorInfo, 0.5, 128.0)
+	my_scheduler := &example_scheduler.ExampleScheduler{
+		ExecutorInfo: executorInfo,
+		NeededCpu:    0.5,
+		NeededRam:    128.0,
+	}
 
 	//Framework
 	frameworkInfo := &mesosproto.FrameworkInfo{
