@@ -27,6 +27,7 @@ func (e *exampleExecutor) LaunchTask(driver executor.ExecutorDriver, taskInfo *m
 	fmt.Printf("Launching task %v with data [%#x]\n", taskInfo.GetName(), taskInfo.Data)
 	logg("launching task")
 
+	//Send a status update to the scheduler
 	runStatus := &mesosproto.TaskStatus{
 		TaskId: taskInfo.GetTaskId(),
 		State:  mesosproto.TaskState_TASK_RUNNING.Enum(),
@@ -39,21 +40,9 @@ func (e *exampleExecutor) LaunchTask(driver executor.ExecutorDriver, taskInfo *m
 
 	e.timesLaunched++
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write(taskInfo.Data)
+	launchMyServer(taskInfo.Data)
 
-		_, err = driver.SendStatusUpdate(mesosproto.TaskState_TASK_FAILED)
-		if err != nil {
-			fmt.Println("Got error", err)
-			logg("got error 2")
-			return
-		}
-	})
-
-	log.Info("Running server in port 54231")
-	http.ListenAndServe(":54231", nil)
-
-	// Finish task
+	//Send a status update to the scheduler
 	fmt.Println("Finishing task", taskInfo.GetName())
 	finStatus := &mesosproto.TaskStatus{
 		TaskId: taskInfo.GetTaskId(),
@@ -67,7 +56,6 @@ func (e *exampleExecutor) LaunchTask(driver executor.ExecutorDriver, taskInfo *m
 	}
 
 	fmt.Println("Task finished", taskInfo.GetName())
-	logg("task finished")
 }
 
 func init() {
@@ -94,6 +82,18 @@ func main() {
 	fmt.Println("Executor process has started and running.")
 	driver.Join()
 }
+
+//launchMyServer launched an blocking HTTP server with the data provided by the
+//scheduler
+func launchMyServer(data []byte) {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Write(data)
+	})
+
+	log.Info("Running server in port 54231")
+	http.ListenAndServe(":54231", nil)
+}
+
 func logg(msg string) {
 	ioutil.WriteFile("/tmp/test", []byte(msg), 0644)
 }
@@ -116,22 +116,22 @@ func (e *exampleExecutor) Disconnected(executor.ExecutorDriver) {
 	logg("Executor disconnected.")
 }
 
-func (exec *exampleExecutor) KillTask(executor.ExecutorDriver, *mesosproto.TaskID) {
+func (e *exampleExecutor) KillTask(executor.ExecutorDriver, *mesosproto.TaskID) {
 	fmt.Println("Kill task")
 	logg("kill task")
 }
 
-func (exec *exampleExecutor) FrameworkMessage(driver executor.ExecutorDriver, msg string) {
+func (e *exampleExecutor) FrameworkMessage(driver executor.ExecutorDriver, msg string) {
 	fmt.Println("Got framework message: ", msg)
 	logg("got framework message")
 }
 
-func (exec *exampleExecutor) Shutdown(executor.ExecutorDriver) {
+func (e *exampleExecutor) Shutdown(executor.ExecutorDriver) {
 	fmt.Println("Shutting down the executor")
 	logg("shutting down")
 }
 
-func (exec *exampleExecutor) Error(driver executor.ExecutorDriver, err string) {
+func (e *exampleExecutor) Error(driver executor.ExecutorDriver, err string) {
 	fmt.Println("Got error message:", err)
 	logg("got error message")
 }

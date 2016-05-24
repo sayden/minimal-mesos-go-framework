@@ -7,12 +7,12 @@ import (
 	"github.com/mesos/mesos-go/mesosproto"
 	"github.com/mesos/mesos-go/mesosutil"
 	"github.com/mesos/mesos-go/scheduler"
-	"github.com/sayden/minimal-mesos-framework/example_scheduler"
+	"github.com/sayden/minimal-mesos-go-framework/example_scheduler"
 
 	"os"
 
 	log "github.com/Sirupsen/logrus"
-)
+-)
 
 var (
 	master = flag.String("master", "127.0.0.1:5050", "Master address <ip:port>")
