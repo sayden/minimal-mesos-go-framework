@@ -12,7 +12,7 @@ import (
 	"os"
 
 	log "github.com/Sirupsen/logrus"
--)
+)
 
 var (
 	master = flag.String("master", "127.0.0.1:5050", "Master address <ip:port>")
