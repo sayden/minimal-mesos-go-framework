@@ -10,6 +10,7 @@ import (
 	"github.com/mesos/mesos-go/mesosproto"
 
 	log "github.com/Sirupsen/logrus"
+	"strconv"
 )
 
 type exampleExecutor struct {
@@ -36,11 +37,11 @@ func (e *exampleExecutor) LaunchTask(driver executor.ExecutorDriver, taskInfo *m
 
 	e.timesLaunched++
 
-	var port int
+	var port string
 
 	for _, resource := range taskInfo.Resources {
 		if resource.GetName() == "ports" {
-			port = int(resource.GetRanges().GetRange()[0].GetBegin())
+			port = strconv.FormatUint(resource.GetRanges().GetRange()[0].GetBegin(), 10)
 		}
 	}
 
@@ -88,13 +89,13 @@ func main() {
 
 //launchMyServer launched an blocking HTTP server with the data provided by the
 //scheduler
-func launchMyServer(data []byte, port int) {
+func launchMyServer(data []byte, port string) {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write(data)
 	})
 
-	log.Infof("Running server in port %s\n", string(port))
-	http.ListenAndServe(":" + string(port), nil)
+	log.Infof("Running server in port %s", port)
+	http.ListenAndServe(":" + port, nil)
 }
 
 //Registered is an implementation required by Mesos

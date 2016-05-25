@@ -67,7 +67,6 @@ func (s *ExampleScheduler) ResourceOffers(driver scheduler.SchedulerDriver, offe
 			} else if resource.GetName() == "mem" {
 				offeredMem += resource.GetScalar().GetValue()
 			} else if resource.GetName() == "ports" {
-				log.Infof("Offered ports: %v", resource.GetRanges())
 				ranges := resource.GetRanges()
 
 				//Take the first value of the range as we only need one port
@@ -89,7 +88,7 @@ func (s *ExampleScheduler) ResourceOffers(driver scheduler.SchedulerDriver, offe
 			offer.Id.GetValue(),
 			offeredCpu,
 			offeredMem,
-			offeredPort)
+			offeredPort[0].GetBegin())
 
 		//Decline offer if the offer doesn't satisfy our needs
 		if offeredCpu < s.NeededCpu || offeredMem < s.NeededRam || len(offeredPort) == 0 {
