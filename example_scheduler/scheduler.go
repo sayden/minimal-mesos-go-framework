@@ -59,14 +59,18 @@ func (s *ExampleScheduler) ResourceOffers(driver scheduler.SchedulerDriver, offe
 
 		offeredCpu := 0.0
 		offeredMem := 0.0
-		var offeredPort []*mesosproto.Value_Range = make([]*mesosproto.Value_Range,1)
+		var offeredPort []*mesosproto.Value_Range = make([]*mesosproto.Value_Range, 1)
 
+		// Iterate over resources to find one that fits all our needs. This
+		// usually isn't done this way as you must accept an offer that cover
+		// partially your needs and keep accepting until you fit all of them
 		for _, resource := range offer.Resources {
-			if resource.GetName() == "cpus" {
+			switch resource.GetName() {
+			case "cpus":
 				offeredCpu += resource.GetScalar().GetValue()
-			} else if resource.GetName() == "mem" {
+			case "mem":
 				offeredMem += resource.GetScalar().GetValue()
-			} else if resource.GetName() == "ports" {
+			case "ports":
 				ranges := resource.GetRanges()
 
 				//Take the first value of the range as we only need one port
@@ -74,8 +78,8 @@ func (s *ExampleScheduler) ResourceOffers(driver scheduler.SchedulerDriver, offe
 					firstRange := ranges.Range[0]
 
 					uniquePortRange := mesosproto.Value_Range{
-						Begin:firstRange.Begin,
-						End:firstRange.Begin,
+						Begin: firstRange.Begin,
+						End:   firstRange.Begin,
 					}
 
 					offeredPort[0] = &uniquePortRange
@@ -84,11 +88,12 @@ func (s *ExampleScheduler) ResourceOffers(driver scheduler.SchedulerDriver, offe
 		}
 
 		//Print information about the received offer
-		log.Infof("Received Offer <%v> with cpus=%v mem=%v, port=%v",
+		log.Infof("Received Offer <%v> with cpus=%v mem=%v, port=%v from %s",
 			offer.Id.GetValue(),
 			offeredCpu,
 			offeredMem,
-			offeredPort[0].GetBegin())
+			offeredPort[0].GetBegin(),
+			*offer.Hostname)
 
 		//Decline offer if the offer doesn't satisfy our needs
 		if offeredCpu < s.NeededCpu || offeredMem < s.NeededRam || len(offeredPort) == 0 {

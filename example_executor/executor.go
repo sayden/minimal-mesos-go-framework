@@ -9,8 +9,9 @@ import (
 	"github.com/mesos/mesos-go/executor"
 	"github.com/mesos/mesos-go/mesosproto"
 
-	log "github.com/Sirupsen/logrus"
 	"strconv"
+
+	log "github.com/Sirupsen/logrus"
 )
 
 type exampleExecutor struct {
@@ -95,7 +96,7 @@ func launchMyServer(data []byte, port string) {
 	})
 
 	log.Infof("Running server in port %s", port)
-	http.ListenAndServe(":" + port, nil)
+	http.ListenAndServe(":"+port, nil)
 }
 
 //Registered is an implementation required by Mesos
