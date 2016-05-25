@@ -40,7 +40,7 @@ func (e *exampleExecutor) LaunchTask(driver executor.ExecutorDriver, taskInfo *m
 
 	e.timesLaunched++
 
-	launchMyServer(taskInfo.Data)
+	launchMyServer(taskInfo)
 
 	//Send a status update to the scheduler
 	fmt.Println("Finishing task", taskInfo.GetName())
@@ -85,13 +85,21 @@ func main() {
 
 //launchMyServer launched an blocking HTTP server with the data provided by the
 //scheduler
-func launchMyServer(data []byte) {
+func launchMyServer(taskInfo *mesosproto.TaskInfo) {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write(data)
+		w.Write(taskInfo.Data)
 	})
 
+	var port int
+
+	for _, resource := range taskInfo.Resources {
+		if resource.GetName() == "ports" {
+			port = int(resource.GetRanges().GetRange()[0].GetBegin())
+		}
+	}
+
 	log.Info("Running server in port 54231")
-	http.ListenAndServe(":54231", nil)
+	http.ListenAndServe(":" + string(port), nil)
 }
 
 func logg(msg string) {

@@ -10,15 +10,15 @@ import (
 )
 
 type ExampleScheduler struct {
-	ExecutorInfo  *mesosproto.ExecutorInfo
+	ExecutorInfo *mesosproto.ExecutorInfo
 
 	//The CPUs that the tasks need
-	NeededCpu     float64
+	NeededCpu float64
 
 	//The RAM that the tasks need
-	NeededRam     float64
+	NeededRam float64
 
-	launched      bool
+	launched bool
 }
 
 //StatusUpdate is called by a running task to provide status information to the
@@ -57,18 +57,42 @@ func (s *ExampleScheduler) ResourceOffers(driver scheduler.SchedulerDriver, offe
 			continue
 		}
 
-		offeredCpu := getOfferScalar(offer, "cpus")
-		offeredMem := getOfferScalar(offer, "mem")
+		offeredCpu := 0.0
+		offeredMem := 0.0
+		var offeredPort []*mesosproto.Value_Range = make([]*mesosproto.Value_Range,1)
+
+		for _, resource := range offer.Resources {
+			if resource.GetName() == "cpus" {
+				offeredCpu += resource.GetScalar().GetValue()
+			} else if resource.GetName() == "mem" {
+				offeredMem += resource.GetScalar().GetValue()
+			} else if resource.GetName() == "ports" {
+				log.Infof("Offered ports: %v", resource.GetRanges())
+				ranges := resource.GetRanges()
+
+				//Take the first value of the range as we only need one port
+				if len(ranges.Range) > 0 {
+					firstRange := ranges.Range[0]
+
+					uniquePortRange := mesosproto.Value_Range{
+						Begin:firstRange.Begin,
+						End:firstRange.Begin,
+					}
+
+					offeredPort[0] = &uniquePortRange
+				}
+			}
+		}
 
 		//Print information about the received offer
-		log.Infof("Received Offer <%v> with cpus=%v mem=%v",
+		log.Infof("Received Offer <%v> with cpus=%v mem=%v, port=%v",
 			offer.Id.GetValue(),
 			offeredCpu,
-			offeredMem)
-
+			offeredMem,
+			offeredPort)
 
 		//Decline offer if the offer doesn't satisfy our needs
-		if offeredCpu < s.NeededCpu || offeredMem < s.NeededRam {
+		if offeredCpu < s.NeededCpu || offeredMem < s.NeededRam || len(offeredPort) == 0 {
 			log.Infof("Declining offer <%v>\n", offer.Id.GetValue())
 			driver.DeclineOffer(offer.Id, &mesosproto.Filters{RefuseSeconds: proto.Float64(1)})
 			continue
@@ -84,6 +108,8 @@ func (s *ExampleScheduler) ResourceOffers(driver scheduler.SchedulerDriver, offe
 			Value: proto.String(uuid.NewV4().String()),
 		}
 
+		log.Infof("Offered portss: %v", offeredPort)
+
 		//Provide information about the name of the task, id, the slave will
 		//be run of, the executor (that contains the command to execute as well
 		//as the uri to download the executor or executors from and the amount
@@ -96,6 +122,7 @@ func (s *ExampleScheduler) ResourceOffers(driver scheduler.SchedulerDriver, offe
 			Resources: []*mesosproto.Resource{
 				mesosutil.NewScalarResource("cpus", s.NeededCpu),
 				mesosutil.NewScalarResource("mem", s.NeededRam),
+				mesosutil.NewRangesResource("port", offeredPort),
 			},
 			Data: []byte("Hello from Server"),
 		}
@@ -109,19 +136,4 @@ func (s *ExampleScheduler) ResourceOffers(driver scheduler.SchedulerDriver, offe
 		//Launch the task
 		driver.LaunchTasks([]*mesosproto.OfferID{offer.Id}, tasks, &mesosproto.Filters{RefuseSeconds: proto.Float64(10)})
 	}
-}
-
-//getOfferScalar helps to parse offer information to get a float64 representing
-//a resource type (like ports, ram or cpus)
-func getOfferScalar(offer *mesosproto.Offer, name string) float64 {
-	resources := mesosutil.FilterResources(offer.Resources, func(res *mesosproto.Resource) bool {
-		return res.GetName() == name
-	})
-
-	value := 0.0
-	for _, res := range resources {
-		value += res.GetScalar().GetValue()
-	}
-
-	return value
 }
