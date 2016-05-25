@@ -9,8 +9,6 @@ import (
 	"github.com/mesos/mesos-go/executor"
 	"github.com/mesos/mesos-go/mesosproto"
 
-	"io/ioutil"
-
 	log "github.com/Sirupsen/logrus"
 )
 
@@ -25,7 +23,6 @@ func newExampleExecutor() *exampleExecutor {
 //LaunchTask is an implementation required by Mesos
 func (e *exampleExecutor) LaunchTask(driver executor.ExecutorDriver, taskInfo *mesosproto.TaskInfo) {
 	fmt.Printf("Launching task %v with data [%#x]\n", taskInfo.GetName(), taskInfo.Data)
-	logg("launching task")
 
 	//Send a status update to the scheduler
 	runStatus := &mesosproto.TaskStatus{
@@ -35,12 +32,19 @@ func (e *exampleExecutor) LaunchTask(driver executor.ExecutorDriver, taskInfo *m
 	_, err := driver.SendStatusUpdate(runStatus)
 	if err != nil {
 		fmt.Println("Got error", err)
-		logg("got error 1")
 	}
 
 	e.timesLaunched++
 
-	launchMyServer(taskInfo)
+	var port int
+
+	for _, resource := range taskInfo.Resources {
+		if resource.GetName() == "ports" {
+			port = int(resource.GetRanges().GetRange()[0].GetBegin())
+		}
+	}
+
+	launchMyServer(taskInfo.Data, port)
 
 	//Send a status update to the scheduler
 	fmt.Println("Finishing task", taskInfo.GetName())
@@ -51,7 +55,6 @@ func (e *exampleExecutor) LaunchTask(driver executor.ExecutorDriver, taskInfo *m
 	_, err = driver.SendStatusUpdate(finStatus)
 	if err != nil {
 		fmt.Println("Got error", err)
-		logg("got error 2")
 		return
 	}
 
@@ -85,61 +88,42 @@ func main() {
 
 //launchMyServer launched an blocking HTTP server with the data provided by the
 //scheduler
-func launchMyServer(taskInfo *mesosproto.TaskInfo) {
+func launchMyServer(data []byte, port int) {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write(taskInfo.Data)
+		w.Write(data)
 	})
 
-	var port int
-
-	for _, resource := range taskInfo.Resources {
-		if resource.GetName() == "ports" {
-			port = int(resource.GetRanges().GetRange()[0].GetBegin())
-		}
-	}
-
-	log.Info("Running server in port 54231")
+	log.Infof("Running server in port %s\n", string(port))
 	http.ListenAndServe(":" + string(port), nil)
-}
-
-func logg(msg string) {
-	ioutil.WriteFile("/tmp/test", []byte(msg), 0644)
 }
 
 //Registered is an implementation required by Mesos
 func (e *exampleExecutor) Registered(driver executor.ExecutorDriver, execInfo *mesosproto.ExecutorInfo, fwinfo *mesosproto.FrameworkInfo, slaveInfo *mesosproto.SlaveInfo) {
 	fmt.Println("Registered Executor on slave ", slaveInfo.GetHostname())
-	logg("registered")
 }
 
 //Reregistered is an implementation required by Mesos
 func (e *exampleExecutor) Reregistered(driver executor.ExecutorDriver, slaveInfo *mesosproto.SlaveInfo) {
 	fmt.Println("Re-registered Executor on slave ", slaveInfo.GetHostname())
-	logg("re registered")
 }
 
 //Disconnected is an implementation required by Mesos
 func (e *exampleExecutor) Disconnected(executor.ExecutorDriver) {
 	fmt.Println("Executor disconnected.")
-	logg("Executor disconnected.")
 }
 
 func (e *exampleExecutor) KillTask(executor.ExecutorDriver, *mesosproto.TaskID) {
 	fmt.Println("Kill task")
-	logg("kill task")
 }
 
 func (e *exampleExecutor) FrameworkMessage(driver executor.ExecutorDriver, msg string) {
 	fmt.Println("Got framework message: ", msg)
-	logg("got framework message")
 }
 
 func (e *exampleExecutor) Shutdown(executor.ExecutorDriver) {
 	fmt.Println("Shutting down the executor")
-	logg("shutting down")
 }
 
 func (e *exampleExecutor) Error(driver executor.ExecutorDriver, err string) {
 	fmt.Println("Got error message:", err)
-	logg("got error message")
 }

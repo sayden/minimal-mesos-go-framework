@@ -108,8 +108,6 @@ func (s *ExampleScheduler) ResourceOffers(driver scheduler.SchedulerDriver, offe
 			Value: proto.String(uuid.NewV4().String()),
 		}
 
-		log.Infof("Offered portss: %v", offeredPort)
-
 		//Provide information about the name of the task, id, the slave will
 		//be run of, the executor (that contains the command to execute as well
 		//as the uri to download the executor or executors from and the amount
@@ -122,7 +120,7 @@ func (s *ExampleScheduler) ResourceOffers(driver scheduler.SchedulerDriver, offe
 			Resources: []*mesosproto.Resource{
 				mesosutil.NewScalarResource("cpus", s.NeededCpu),
 				mesosutil.NewScalarResource("mem", s.NeededRam),
-				mesosutil.NewRangesResource("port", offeredPort),
+				mesosutil.NewRangesResource("ports", offeredPort),
 			},
 			Data: []byte("Hello from Server"),
 		}
@@ -134,6 +132,11 @@ func (s *ExampleScheduler) ResourceOffers(driver scheduler.SchedulerDriver, offe
 		log.Infoln("Launching task for offer", offer.Id.GetValue())
 
 		//Launch the task
-		driver.LaunchTasks([]*mesosproto.OfferID{offer.Id}, tasks, &mesosproto.Filters{RefuseSeconds: proto.Float64(10)})
+		status, err := driver.LaunchTasks([]*mesosproto.OfferID{offer.Id}, tasks, &mesosproto.Filters{RefuseSeconds: proto.Float64(10)})
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		log.Infof("Launch task status: %v", status)
 	}
 }
