@@ -78,7 +78,7 @@ Here, we'll set the URL where the cluster can download the executor in the varia
 //Framework
 frameworkInfo := &mesosproto.FrameworkInfo{
    User: proto.String("root"), // Mesos-go will fill in user.
-   Name: proto.String("Stratio Server Framework (Go)"),
+   Name: proto.String("Web Server Framework (Go)"),
 }
 ```
 
@@ -86,160 +86,22 @@ frameworkInfo := &mesosproto.FrameworkInfo{
 Now we'll create a struct that will implement "SchedulerDriver" interface:
 
 ```go
-type ExampleScheduler struct{
-    launched bool
-}
+type ExampleScheduler struct {
+	ExecutorInfo *mesosproto.ExecutorInfo
 
-//StatusUpdate is called by a running task to provide status information to the
-//scheduler.
-func (s *ExampleScheduler) StatusUpdate(driver scheduler.SchedulerDriver, status *mesosproto.TaskStatus) {
-   log.Infoln("Status update: task", status.TaskId.GetValue(), " is in state ", status.State.Enum().String())
+	//The CPUs that the tasks need
+	NeededCpu float64
 
-   if status.GetState() == mesosproto.TaskState_TASK_RUNNING {
-      s.launched = true
-      log.Info("Server is running")
-   }
+	//The RAM that the tasks need
+	NeededRam float64
 
-   if status.GetState() == mesosproto.TaskState_TASK_FINISHED {
-      log.Info("Server is finished")
-   }
-
-   if status.GetState() == mesosproto.TaskState_TASK_LOST ||
-      status.GetState() == mesosproto.TaskState_TASK_KILLED ||
-      status.GetState() == mesosproto.TaskState_TASK_FAILED {
-      log.Infoln(
-         "Aborting because task", status.TaskId.GetValue(),
-         "is in unexpected state", status.State.String(),
-         "with message: ", status.GetMessage(),
-      )
-      driver.Abort()
-   }
-}
-
-//ResourceOffers will be called by the Mesos framework to provide an array of
-//offers to this framework. Is up to you to check the content of the offers
-//and to accept or reject them if they don't fit the needs of the framework
-func (s *ExampleScheduler) ResourceOffers(driver scheduler.SchedulerDriver, offers []*mesosproto.Offer) {
-   for _, offer := range offers {
-      if s.launched {
-         driver.DeclineOffer(offer.Id, &mesosproto.Filters{RefuseSeconds: proto.Float64(1)})
-         continue
-      }
-
-    offeredCpu := 0.0
-    offeredMem := 0.0
-    var offeredPort []*mesosproto.Value_Range = make([]*mesosproto.Value_Range,1)
-
-    for _, resource := range offer.Resources {
-        if resource.GetName() == "cpus" {
-            offeredCpu += resource.GetScalar().GetValue()
-        } else if resource.GetName() == "mem" {
-            offeredMem += resource.GetScalar().GetValue()
-        } else if resource.GetName() == "ports" {
-            ranges := resource.GetRanges()
-
-            //Take the first value of the range as we only need one port
-            if len(ranges.Range) > 0 {
-                firstRange := ranges.Range[0]
-
-                uniquePortRange := mesosproto.Value_Range{
-                    Begin:firstRange.Begin,
-                    End:firstRange.Begin,
-                }
-
-                offeredPort[0] = &uniquePortRange
-            }
-        }
-    }
-
-    //Print information about the received offer
-    log.Infof("Received Offer <%v> with cpus=%v mem=%v, port=%v",
-       offer.Id.GetValue(),
-       offeredCpu,
-       offeredMem,
-       offeredPort[0].GetBegin())
-
-
-      //Decline offer if the offer doesn't satisfy our needs
-      if offeredCpu < s.NeededCpu || offeredMem < s.NeededRam {
-         log.Infof("Declining offer <%v>\n", offer.Id.GetValue())
-         driver.DeclineOffer(offer.Id, &mesosproto.Filters{RefuseSeconds: proto.Float64(1)})
-         continue
-      }
-
-      // At this point we have determined we will be accepting at least part of this offer
-      s.launched = true
-      var tasks []*mesosproto.TaskInfo
-
-      // We have to create a TaskID so we use the go-uuid library to create
-      // a random id.
-      taskId := &mesosproto.TaskID{
-         Value: proto.String(uuid.NewV4().String()),
-      }
-
-      //Provide information about the name of the task, id, the slave will
-      //be run of, the executor (that contains the command to execute as well
-      //as the uri to download the executor or executors from and the amount
-      //of resource the taks will use (not neccesary all from the offer)
-      task := &mesosproto.TaskInfo{
-         Name:     proto.String("go-task-" + taskId.GetValue()),
-         TaskId:   taskId,
-         SlaveId:  offer.SlaveId,
-         Executor: s.ExecutorInfo,
-         Resources: []*mesosproto.Resource{
-            mesosutil.NewScalarResource("cpus", s.NeededCpu),
-            mesosutil.NewScalarResource("mem", s.NeededRam),
-         },
-         Data: []byte("Hello from Server"),
-      }
-
-      log.Infof("Prepared task: %s with offer %s for launch\n", task.GetName(), offer.Id.GetValue())
-
-      tasks = append(tasks, task)
-
-      log.Infoln("Launching task for offer", offer.Id.GetValue())
-
-      //Launch the task
-      driver.LaunchTasks([]*mesosproto.OfferID{offer.Id}, tasks, &mesosproto.Filters{RefuseSeconds: proto.Float64(10)})
-   }
-}
-
-func (s *ExampleScheduler) Registered(driver scheduler.SchedulerDriver, frameworkId *mesosproto.FrameworkID, masterInfo *mesosproto.MasterInfo) {
-   log.Infoln("Scheduler Registered with Master ", masterInfo)
-}
-
-func (s *ExampleScheduler) Reregistered(driver scheduler.SchedulerDriver, masterInfo *mesosproto.MasterInfo) {
-   log.Infoln("Scheduler Re-Registered with Master ", masterInfo)
-}
-
-func (s *ExampleScheduler) Disconnected(scheduler.SchedulerDriver) {
-   log.Infoln("Scheduler Disconnected")
-}
-
-func (sched *ExampleScheduler) OfferRescinded(s scheduler.SchedulerDriver, id *mesosproto.OfferID) {
-   log.Infof("Offer '%v' rescinded.\n", *id)
-}
-
-func (sched *ExampleScheduler) FrameworkMessage(s scheduler.SchedulerDriver, exId *mesosproto.ExecutorID, slvId *mesosproto.SlaveID, msg string) {
-   log.Infof("Received framework message from executor '%v' on slave '%v': %s.\n", *exId, *slvId, msg)
-}
-
-func (sched *ExampleScheduler) SlaveLost(s scheduler.SchedulerDriver, id *mesosproto.SlaveID) {
-   log.Infof("Slave '%v' lost.\n", *id)
-}
-
-func (sched *ExampleScheduler) ExecutorLost(s scheduler.SchedulerDriver, exId *mesosproto.ExecutorID, slvId *mesosproto.SlaveID, i int) {
-   log.Infof("Executor '%v' lost on slave '%v' with exit code: %v.\n", exId.GetValue(), slvId.GetValue(), i)
-}
-
-func (sched *ExampleScheduler) Error(driver scheduler.SchedulerDriver, err string) {
-   log.Infoln("Scheduler received error:", err)
+	launched bool
 }
 ```
 
-As you can see, we have implemented extensively one method (ResourceOffers) and the rest simply do some logging.
-* _StatusUpdate_: This method will be called when the Executor notify scheduler with some update on their status. We'll see later that this status update and information must be sent manually when implementing the Executor. In our example we don't do anything special, We simply setup some logging depending on the status received. Pay attention that we abort the driver when a "Lost", "Killed" or "Failed" status is received.
-* _ResourceOffers_: ResourceOffers will be called on every offer from the cluster, even when executor are already running and is up to you to refuse offers once you have launched all executors you need. Let's analyze it step by step:
+We will implement extensively one method (`ResourceOffers`) and the rest simply do some logging.
+* `StatusUpdate`: This method will be called when the Executor notify scheduler with some update on their status. We'll see later that this status update and information must be sent manually when implementing the Executor. In our example we don't do anything special, We simply setup some logging depending on the status received. Pay attention that we abort the driver when a "Lost", "Killed" or "Failed" status is received.
+* `ResourceOffers`: ResourceOffers will be called on every offer from the cluster, even when executor are already running and is up to you to refuse offers once you have launched all executors you need. Let's analyze it step by step:
 
 First of all, we'll iterate through all offers received (because **you'll receive offers in an array, not one by one**). Then, we checked that our example task isn't running to decline this offer if it is (and continue to next). You could be thinking why I don't check if the executor is running before iterating the offers, this is to actively refuse the offers that are received so that they're available as soon as possible to other frameworks.
 
@@ -253,7 +115,7 @@ func (s *ExampleScheduler) ResourceOffers(driver scheduler.SchedulerDriver, offe
 ...
 ```
 
-Next, we checked the contents of the offer. In the offer, each resource is of one type (cpu, mem, port) defined by the field "Name" and recovered using "GetName()"
+Next, we checked the contents of the offer. In the offer, each resource is of one type (cpu, mem, port...) defined by the field "Name" and recovered using "GetName()"
 
 ```go
 func (s *ExampleScheduler) ResourceOffers(driver scheduler.SchedulerDriver, offers []*mesosproto.Offer) {
@@ -263,39 +125,111 @@ func (s *ExampleScheduler) ResourceOffers(driver scheduler.SchedulerDriver, offe
             continue
         }
 
-    offeredCpu := 0.0
-    offeredMem := 0.0
-    var offeredPort []*mesosproto.Value_Range = make([]*mesosproto.Value_Range,1)
 
-    for _, resource := range offer.Resources {
-        if resource.GetName() == "cpus" {
-            offeredCpu += resource.GetScalar().GetValue()
-        } else if resource.GetName() == "mem" {
-            offeredMem += resource.GetScalar().GetValue()
-        } else if resource.GetName() == "ports" {
-            ranges := resource.GetRanges()
+        		offeredCpu := 0.0
+        		offeredMem := 0.0
+        		var offeredPort []*mesosproto.Value_Range = make([]*mesosproto.Value_Range, 1)
 
-            //Take the first value of the range as we only need one port
-            if len(ranges.Range) > 0 {
-                firstRange := ranges.Range[0]
+        		// Iterate over resources to find one that fits all our needs. This
+        		// usually isn't done this way as you must accept an offer that cover
+        		// partially your needs and keep accepting until you fit all of them
+        		for _, resource := range offer.Resources {
+        			switch resource.GetName() {
+        			case "cpus":
+        				offeredCpu += resource.GetScalar().GetValue()
+        			case "mem":
+        				offeredMem += resource.GetScalar().GetValue()
+        			case "ports":
+        				ranges := resource.GetRanges()
 
-                uniquePortRange := mesosproto.Value_Range{
-                    Begin:firstRange.Begin,
-                    End:firstRange.Begin,
-                }
+        				//Take the first value of the range as we only need one port
+        				if len(ranges.Range) > 0 {
+        					firstRange := ranges.Range[0]
 
-                offeredPort[0] = &uniquePortRange
-            }
-        }
-    }
+        					uniquePortRange := mesosproto.Value_Range{
+        						Begin: firstRange.Begin,
+        						End:   firstRange.Begin,
+        					}
 
-    //Print information about the received offer
-    log.Infof("Received Offer <%v> with cpus=%v mem=%v, port=%v",
-       offer.Id.GetValue(),
-       offeredCpu,
-       offeredMem,
-       offeredPort[0].GetBegin())
+        					offeredPort[0] = &uniquePortRange
+        				}
+        			}
+        		}
+
+		//Print information about the received offer
+		log.Infof("Received Offer <%v> with cpus=%v mem=%v, port=%v from %s",
+			offer.Id.GetValue(),
+			offeredCpu,
+			offeredMem,
+			offeredPort[0].GetBegin(),
+			*offer.Hostname)
 ...
 ...
-.......
 ```
+After checking if our unique job is already launched, we create 3 variables that will hold the values of the offers so that we can check if they fit our needs later. We iterate over each resource using a switch to check the offered resource. As you can see, ports are slightly complex because their offers comes in ranges (of 100 ports, for example) so you have to create a new offer just with the ones you need (maybe one, maybe all of them).
+
+```go
+	//Decline offer if the offer doesn't satisfy our needs
+	if offeredCpu < s.NeededCpu || offeredMem < s.NeededRam || len(offeredPort) == 0 {
+		log.Infof("Declining offer <%v>\n", offer.Id.GetValue())
+		driver.DeclineOffer(offer.Id, &mesosproto.Filters{RefuseSeconds: proto.Float64(1)})
+		continue
+	}
+```
+
+So now we checked if the contents of the offers fit the needs of our `ExampleScheduler` that represents the needs of the executor (you don't have to store the needs in the scheduler this way but we did it this way for simplicity). If the offer doesn't fit our needs we explicitly decline it and check the next offer.
+
+```go
+// At this point we have determined we accept the offer
+
+// We have to create a TaskID so we use the go-uuid library to create
+// a random id.
+taskId := &mesosproto.TaskID{
+  Value: proto.String(uuid.NewV4().String()),
+}
+
+//Provide information about the name of the task, id, the slave will
+//be run of, the executor (that contains the command to execute as well
+//as the uri to download the executor or executors from and the amount
+//of resource the taks will use (not neccesary all from the offer)
+task := &mesosproto.TaskInfo{
+  Name:     proto.String("go-task-" + taskId.GetValue()),
+  TaskId:   taskId,
+  SlaveId:  offer.SlaveId,
+  Executor: s.ExecutorInfo,
+  Resources: []*mesosproto.Resource{
+  	mesosutil.NewScalarResource("cpus", s.NeededCpu),
+  	mesosutil.NewScalarResource("mem", s.NeededRam),
+  	mesosutil.NewRangesResource("ports", offeredPort),
+  },
+  Data: []byte("Hello from Server"),
+}
+
+log.Infof("Prepared task: %s with offer %s for launch\n", task.GetName(), offer.Id.GetValue())
+```
+
+Once we have an offer that satisfy our needs we have to compose a `mesosproto.TaskInfo` with a `mesosproto.TaskID` and some information:
+* A name for the task. Here we prefix it with `go-task-` and we've added the id we generated for the `TaskID` using a special library to generate uuids.
+* The TaskID object that we've created just over it
+* The executor information that we passed on ExampleScheduler creation
+* The Resources needs. Not the offers that you've received but the specific needs of your framework (that most of the times will be less than the offer).
+* Some Data that you want to pass to the executors.
+
+
+```go
+  var tasks []*mesosproto.TaskInfo
+	tasks = append(tasks, task)
+
+	log.Infoln("Launching task for offer", offer.Id.GetValue())
+
+	//Launch the task
+	status, err := driver.LaunchTasks([]*mesosproto.OfferID{offer.Id}, tasks, &mesosproto.Filters{RefuseSeconds: proto.Float64(10)})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Infof("Launch task status: %v", status)
+	s.launched = true
+```
+
+Finally, we have to create an array of TaskInfo object to accept the offer (as we can launch one or many tasks). We launch the tasks with `LaunchTasks` by passing an array of offers ID's (we can accept more than one offer to fit our needs) and we set the `launched` variable to `true` so we decline offers from this point.

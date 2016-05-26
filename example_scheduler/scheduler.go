@@ -102,9 +102,7 @@ func (s *ExampleScheduler) ResourceOffers(driver scheduler.SchedulerDriver, offe
 			continue
 		}
 
-		// At this point we have determined we will be accepting at least part of this offer
-		s.launched = true
-		var tasks []*mesosproto.TaskInfo
+		// At this point we have determined we accept the offer
 
 		// We have to create a TaskID so we use the go-uuid library to create
 		// a random id.
@@ -131,6 +129,7 @@ func (s *ExampleScheduler) ResourceOffers(driver scheduler.SchedulerDriver, offe
 
 		log.Infof("Prepared task: %s with offer %s for launch\n", task.GetName(), offer.Id.GetValue())
 
+		var tasks []*mesosproto.TaskInfo
 		tasks = append(tasks, task)
 
 		log.Infoln("Launching task for offer", offer.Id.GetValue())
@@ -142,5 +141,6 @@ func (s *ExampleScheduler) ResourceOffers(driver scheduler.SchedulerDriver, offe
 		}
 
 		log.Infof("Launch task status: %v", status)
+		s.launched = true
 	}
 }
