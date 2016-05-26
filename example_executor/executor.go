@@ -14,17 +14,19 @@ import (
 	log "github.com/Sirupsen/logrus"
 )
 
-type exampleExecutor struct {
-	timesLaunched int
-}
-
-func newExampleExecutor() *exampleExecutor {
-	return &exampleExecutor{timesLaunched: 0}
-}
+type exampleExecutor struct {}
 
 //LaunchTask is an implementation required by Mesos
 func (e *exampleExecutor) LaunchTask(driver executor.ExecutorDriver, taskInfo *mesosproto.TaskInfo) {
 	fmt.Printf("Launching task %v with data [%#x]\n", taskInfo.GetName(), taskInfo.Data)
+
+	var port string
+
+	for _, resource := range taskInfo.Resources {
+		if resource.GetName() == "ports" {
+			port = strconv.FormatUint(resource.GetRanges().GetRange()[0].GetBegin(), 10)
+		}
+	}
 
 	//Send a status update to the scheduler
 	runStatus := &mesosproto.TaskStatus{
@@ -34,16 +36,6 @@ func (e *exampleExecutor) LaunchTask(driver executor.ExecutorDriver, taskInfo *m
 	_, err := driver.SendStatusUpdate(runStatus)
 	if err != nil {
 		fmt.Println("Got error", err)
-	}
-
-	e.timesLaunched++
-
-	var port string
-
-	for _, resource := range taskInfo.Resources {
-		if resource.GetName() == "ports" {
-			port = strconv.FormatUint(resource.GetRanges().GetRange()[0].GetBegin(), 10)
-		}
 	}
 
 	launchMyServer(taskInfo.Data, port)
@@ -70,10 +62,10 @@ func init() {
 func main() {
 	fmt.Println("Starting Example Executor (Go)")
 
-	dconfig := executor.DriverConfig{
-		Executor: newExampleExecutor(),
+	driverConfig := executor.DriverConfig{
+		Executor: &exampleExecutor{},
 	}
-	driver, err := executor.NewMesosExecutorDriver(dconfig)
+	driver, err := executor.NewMesosExecutorDriver(driverConfig)
 
 	if err != nil {
 		fmt.Println("Unable to create a ExecutorDriver ", err.Error())
