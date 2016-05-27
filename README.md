@@ -124,6 +124,7 @@ func (s *ExampleScheduler) ResourceOffers(driver scheduler.SchedulerDriver, offe
          continue
       }
 ...
+
 ```
 
 Next, we checked the contents of the offer. In the offer, each resource is of one type (cpu, mem, port...) defined by the field "Name" and recovered using "GetName()"
@@ -176,7 +177,9 @@ func (s *ExampleScheduler) ResourceOffers(driver scheduler.SchedulerDriver, offe
 			*offer.Hostname)
 ...
 ...
+
 ```
+
 After checking if our unique job is already launched, we create 3 variables that will hold the values of the offers so that we can check if they fit our needs later. We iterate over each resource using a switch to check the offered resource. As you can see, ports are slightly complex because their offers comes in ranges (of 100 ports, for example) so you have to create a new offer just with the ones you need (maybe one, maybe all of them).
 
 ```go
@@ -462,4 +465,34 @@ func (e *exampleExecutor) Error(driver executor.ExecutorDriver, err string) {
 
 Finally, in our main, we create a `executor.DriverConfig` and we pass it to the Builder to get a Driver, start it and join the event loop to wait for the notification of driver termination.
 
-## 3 Executing the Framework.
+## 3 Executing the Framework
+
+Finally, our framework is ready and we can execute it. We have uploaded our Executor to a public URL in AWS so that it's available for any Mesos cluster.
+
+```bash
+$ ./scheduler --master zk://paas2:2181/mesos
+2016/05/27 11:49:15 Connected to 10.200.0.153:2181
+2016/05/27 11:49:15 Authenticated: id=95962866784272418, timeout=40000
+INFO[0000] Scheduler Registered with Master  &MasterInfo{Id:*a10e0385-8988-4e02-a9c7-e3b8bba7bf95,Ip:*2566965258,Port:*5050,Pid:*master@10.200.0.153:5050,Hostname:*10.200.0.153,Version:*0.28.1,Address:&Address{Hostname:*10.200.0.153,Ip:*10.200.0.153,Port:*5050,XXX_unrecognized:[],},XXX_unrecognized:[],} 
+INFO[0000] Received Offer <a10e0385-8988-4e02-a9c7-e3b8bba7bf95-O52235> with cpus=0 mem=13711, port=1025 from 10.200.0.155 
+INFO[0000] Declining offer <a10e0385-8988-4e02-a9c7-e3b8bba7bf95-O52235>
+ 
+INFO[0000] Received Offer <a10e0385-8988-4e02-a9c7-e3b8bba7bf95-O52236> with cpus=2 mem=14863, port=1025 from 10.200.0.154 
+INFO[0000] Prepared task: go-task-a0d98708-4b54-4b9c-a1e8-b35c27987b90 with offer a10e0385-8988-4e02-a9c7-e3b8bba7bf95-O52236 for launch
+ 
+INFO[0000] Launching task for offer a10e0385-8988-4e02-a9c7-e3b8bba7bf95-O52236 
+INFO[0000] Launch task status: DRIVER_RUNNING           
+INFO[0006] Status update: task f28cda6d-1701-4d4c-9def-5068146e7b37  is in state  TASK_RUNNING 
+INFO[0006] Server is running
+```
+
+As you can see, the Scheduler is registered in the cluster and the first offer is declined as it's not offering any CPU. The second offer is accepted as it fits all our needs: we have set 1 CPU, 512 mb of RAM and one port as needs and the offer has 2 CPU's, 14863 MB or Mem and the port 1025 from 10.200.0.155 machine. We accept this offer and allocate only our needs so that the rest of the offer, that is over our needs, is available for other schedulers or tasks.
+
+Our task is running somewhere. Doing the things correctly we would add this new task to the service discovery and blah blah but for simplicity we have just print the contents of the offer so we can see that it's launched in `10.200.0.157:1025` that were the contents of the offer. If we checked this web server...
+
+```bash
+$ curl 10.200.0.157:1025
+Hello from Server
+```
+
+Done!
