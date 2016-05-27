@@ -1,6 +1,6 @@
 # minimal-mesos-go-framework
 
-Minimally possible mesos framework
+Minimally possible Mesos framework that launches a long running task (a web server). It could be even smaller if we run a command line command, but we wanted to have something closer to what Mesos could be used for.
 
 
 ## How to create a Mesos framework in Go
